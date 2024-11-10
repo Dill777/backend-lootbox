@@ -24,7 +24,7 @@ mongoose
 
         const lootBoxes = [];
 
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 9; i++) {
             lootBoxes.push({
                 name: `LootBox #${i + 1}`,
                 rewards: rewards.map((reward) => ({

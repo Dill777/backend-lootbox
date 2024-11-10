@@ -1,6 +1,8 @@
 const User = require("./models/User");
 const LootBox = require("./models/LootBox");
 const Reward = require("./models/Reward");
+const { openLootBoxSchema, joinSchema } = require("./utils/validation");
+const Joi = require("joi");
 
 let timer = null;
 let timeLeft = 120; // 2 mins
@@ -10,6 +12,19 @@ module.exports = (io) => {
         console.log("New client connected:", socket.id);
 
         socket.on("join", async (userId) => {
+            const { error } = joinSchema.validate(userId);
+            if (error) {
+                console.error("Validation failed for 'join':", error.details);
+                socket.emit("error", { message: error.details[0].message });
+                return;
+            }
+
+            const user = await User.findById(userId);
+            if (!user) {
+                socket.emit("error", { message: "User not found" });
+                return;
+            }
+
             socket.userId = userId;
             await User.findByIdAndUpdate(userId, { onlineStatus: true });
             io.emit("updateUsers", await getAllUsers());
@@ -26,6 +41,23 @@ module.exports = (io) => {
         });
 
         socket.on("openLootBox", async ({ lootBoxId, userId }) => {
+            // validate lootBoxId and userId
+            const { error } = openLootBoxSchema.validate({ lootBoxId, userId });
+            if (error) {
+                console.error(
+                    "Validation failed for 'openLootBox':",
+                    error.details
+                );
+                socket.emit("error", { message: error.details[0].message });
+                return;
+            }
+
+            const user = await User.findById(userId);
+            if (!user) {
+                socket.emit("error", { message: "User not found" });
+                return;
+            }
+
             const lootBox = await LootBox.findOneAndUpdate(
                 { _id: lootBoxId, isOpened: false },
                 { $set: { isOpened: true, openedBy: userId } },
@@ -34,14 +66,13 @@ module.exports = (io) => {
 
             if (!lootBox) {
                 socket.emit("error", {
-                    message: "Loot box is already opened or does not exist",
+                    message: "Lootbox not found or already opened",
                 });
                 return;
             }
 
             const reward = getRandomReward(lootBox.rewards);
 
-            const user = await User.findById(userId);
             user.rewards.push(reward._id);
             await user.save();
 
@@ -69,7 +100,6 @@ module.exports = (io) => {
     });
 };
 
-// Дополнительные функции
 async function getAllUsers() {
     return await User.find().populate("rewards");
 }
